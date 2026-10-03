@@ -1,5 +1,6 @@
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import { getState } from '@/data/qc-store'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
@@ -29,6 +30,9 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {
+  if (key === 'finishedqc') {
+    return { ok: false, message: '成品检验走按产品分册的专用流程（开始检验/送判定/签字等），请在成品检验页操作' }
+  }
   const meta = moduleMeta(key)
   const target = meta.actionTargets[action]
   if (!target) {
@@ -87,6 +91,15 @@ export function downloadEntries(key: string): void {
 export function loadOverview(): OverviewResult {
   const rows = allRows()
   const modules = [...MODULE_BY_KEY.values()].map((meta) => {
+    if (meta.key === 'finishedqc') {
+      // 成品检验走专用多项目存储，看板从那边取数
+      const qc = getState()
+      const pending = qc.reports.filter((row) => row.status !== '已签发').length
+      const abnormal = qc.reports.filter(
+        (row) => row.status === '复检中' || (row.conclusion === '不合格' && row.status !== '已签发'),
+      ).length
+      return { name: meta.name, created: qc.reports.length, pending, abnormal }
+    }
     const entries = rows[meta.key] ?? []
     return {
       name: meta.name,
