@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>留样管理管理</h2>
-        <p class="page-desc">维护留样记录，围绕留样编号、对应批号、留样数量、留样期限做登记、筛选与状态流转。</p>
+        <p class="page-desc">维护留样记录，围绕留样编号、对应批号、留样数量、留样期限做登记、筛选与状态流转；成品检验结论会回写为待办。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记留样记录</button>
@@ -82,16 +82,21 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('retainsample')
-const columns = ["留样编号", "对应批号", "留样数量", "留样期限", "存放条件", "取样日期", "销毁日期", "留样状态"]
+const columns = ["留样编号", "对应批号", "留样数量", "留样期限", "存放条件", "取样日期", "销毁日期", "待办事项", "留样状态"]
 const actions = ["登记留样", "标记到期", "办理销毁"]
 const statuses = ["待留样", "已留样", "已到期", "已销毁"]
-const stats = [{"label": "待留样批次", "value": 0}, {"label": "已留样批次", "value": 0}, {"label": "本月销毁数", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const todoCount = computed(() => rows.value.filter((row) => String(row['待办事项'] ?? '').trim() !== '').length)
+const stats = computed(() => [
+  { label: "待留样批次", value: rows.value.filter((row) => row.status === "待留样").length },
+  { label: "已留样批次", value: rows.value.filter((row) => row.status === "已留样").length },
+  { label: "检验回写待办", value: todoCount.value },
+])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,

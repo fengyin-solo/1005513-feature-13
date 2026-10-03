@@ -1,9 +1,10 @@
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import { clearPackages } from '@/data/aux-store'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
-const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
+const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚', '判定不合格']
 
 export function moduleMeta(key: string): ModuleMeta {
   const meta = MODULE_BY_KEY.get(key)
@@ -11,6 +12,26 @@ export function moduleMeta(key: string): ModuleMeta {
     throw new Error(`没有登记名为 ${key} 的业务模块`)
   }
   return meta
+}
+
+/** 某动作在当前状态下是否允许发起：状态只能一步步推进，跳级一律挡回。 */
+export function actionAllowed(meta: ModuleMeta, action: string, current: string): boolean {
+  const sources = meta.actionSources?.[action]
+  if (sources) {
+    return sources.includes(current)
+  }
+  const target = meta.actionTargets[action]
+  if (!target) {
+    return false
+  }
+  // 未显式登记来源的线性动作：只允许从目标状态的前一步推进，不允许跳级。
+  const targetIndex = meta.statuses.indexOf(target)
+  const currentIndex = meta.statuses.indexOf(current)
+  return targetIndex >= 0 && currentIndex === targetIndex - 1
+}
+
+export function terminalStatuses(meta: ModuleMeta): string[] {
+  return meta.terminalStatuses ?? [meta.statuses[meta.statuses.length - 1]]
 }
 
 export function filterRows(rows: EntryRow[], filters: Record<string, string>): EntryRow[] {
@@ -43,11 +64,14 @@ export function runAction(key: string, id: number, action: string): ActionResult
   if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
   }
-  const lastStatus = meta.statuses[meta.statuses.length - 1]
+  if (!actionAllowed(meta, action, current)) {
+    return { ok: false, message: `${meta.entity}当前是「${current}」，不能直接「${action}」；状态只能一步步推进，先走前一步` }
+  }
+  const terminals = terminalStatuses(meta)
   const updated: EntryRow = {
     ...rows[index],
     status: target,
-    pending: target !== lastStatus,
+    pending: !terminals.includes(target),
     abnormal: NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb)),
   }
   const next = [...rows]
@@ -58,6 +82,10 @@ export function runAction(key: string, id: number, action: string): ActionResult
 
 export function resetModule(key: string): PageResult {
   resetRows(key)
+  if (key === 'finishedqc') {
+    // 报告回到初始数据，打包台账一并清空，避免「已打包」标记串档。
+    clearPackages()
+  }
   return listEntries(key)
 }
 

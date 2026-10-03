@@ -17,6 +17,10 @@ export type ModuleMeta = {
   statuses: string[]
   actions: string[]
   actionTargets: Record<string, string>
+  /** 每个动作允许的来源状态；不登记时按 statuses 顺序默认只能「走一步」。 */
+  actionSources?: Record<string, string[]>
+  /** 终态集合：落到这些状态就不再算待办；不登记时取 statuses 的最后一个。 */
+  terminalStatuses?: string[]
   metrics: string[]
 }
 
